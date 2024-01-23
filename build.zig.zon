@@ -1,8 +1,13 @@
 .{
     .name = "http",
 
-    .version = "0.0.1",
-    .dependencies = .{},
+    .version = "0.0.2",
+    .dependencies = .{
+        .buffer = .{
+            .url = "https://github.com/kamlesh-nb/buffer/archive/refs/tags/v0.0.3.tar.gz",
+            .hash = "1220748fafefb93777e8c582bd6f328a2abe237c0d749dc8c9f89c7b85b8b5b4ebf2",
+        },
+    },
     .paths = .{
         "",
     },

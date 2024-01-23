@@ -6,7 +6,7 @@ const Version = @import("version.zig").Version;
 const Headers = @import("header.zig");
 const Util = @import("util.zig");
 const Errors = @import("errors.zig");
-const Buffer = @import("buffer.zig");
+const Buffer = @import("buffer").Buffer;
 const Response = @This();
 
 pub const Parts = struct {
@@ -20,23 +20,23 @@ body: Body,
 allocator: Allocator,
 
 pub fn new(allocator: Allocator, status: Status, version: Version) !Response {
-    return Response{
+ return Response{
         .parts = Parts{
             .status = status,
             .version = version,
             .headers = try Headers.init(allocator, 1024),
         },
-        .body = Body{ .buffer = try Buffer.create(allocator, "") },
+        .body = Body{ .buffer = Buffer.init(allocator) },
         .allocator = allocator,
     };
 }
 
 pub fn init(allocator: Allocator) !Response {
-    return Response{
+      return Response{
         .parts = Parts{
             .headers = try Headers.init(allocator, 1024),
         },
-        .body = Body{ .buffer = try Buffer.create(allocator, "") },
+        .body = Body{ .buffer = Buffer.init(allocator) },
         .allocator = allocator,
     };
 }
@@ -120,7 +120,6 @@ pub usingnamespace struct {
         }
 
         fn read_body(self: *Parser, reader: anytype) !void {
-
             switch (self.encoding) {
                 .unknown => {
                     self.done = true;
@@ -135,7 +134,7 @@ pub usingnamespace struct {
                     if (self.read_current >= self.read_needed) {
                         self.encoding = .unknown;
                     }
-                    try self.response.body.buffer.concat(self.read_buffer[0..nread]);
+                    try self.response.body.buffer.write(self.read_buffer[0..nread]);
                 },
                 .chunked => {
                     if (self.read_needed == 0) {
@@ -173,12 +172,12 @@ pub usingnamespace struct {
                         self.read_needed = 0;
                     }
 
-                    try self.response.body.buffer.concat(self.read_buffer[0..nread]);
+                    try self.response.body.buffer.write(self.read_buffer[0..nread]);
                 },
             }
         }
 
-        fn next(self: *Parser,  reader: anytype) !void {
+        fn next(self: *Parser, reader: anytype) !void {
             //
             try read_status(self, reader);
             while (!self.headers_done) {
@@ -229,9 +228,9 @@ test "response" {
     };
 
     var response = try Response.new(std.testing.allocator, .ok, .Http11);
-    response.body = Body.new("{ \"name\":  \"oooop\", \"age\": 54 }");
-    defer response.deinit();
-    try response.parts.headers.add("name", "oooop");
+    try response.body.set("{ \"name\":  \"oooop\", \"age\": 54 }");
+    defer response.deinit(std.testing.allocator);
+    response.parts.headers.add("name", "oooop");
 
     const person = try response.body.get(std.testing.allocator, Person);
     std.debug.print("Person: {?}\n", .{person});
@@ -239,4 +238,3 @@ test "response" {
     std.debug.print("\n version: {s} \n", .{response.parts.version.toString()});
     std.debug.print("\n name: {s} \n", .{response.parts.headers.get("name").?});
 }
- 
