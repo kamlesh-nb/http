@@ -21,7 +21,7 @@ body: Body,
 allocator: Allocator,
 
 pub fn new(allocator: Allocator, uri: std.Uri, method: Method, version: Version) !Request {
-   return Request{
+    return Request{
         .parts = Parts{
             .uri = uri,
             .method = method,
@@ -44,7 +44,7 @@ pub fn init(allocator: Allocator) !Request {
 }
 
 pub fn deinit(self: *Request) void {
-     self.parts.headers.deinit(self.allocator);
+    self.parts.headers.deinit(self.allocator);
     self.body.buffer.deinit();
 }
 
@@ -70,36 +70,27 @@ pub usingnamespace struct {
         request: *Request,
         status: usize,
 
-        fn toBytes(self: *Sender) []const u8 {
-            var buffer = try Buffer.init(self.request.allocator);
+        pub fn send(self: *Sender, writer: anytype) !usize {
+            var buffer = Buffer.init(self.request.allocator);
             defer buffer.deinit();
-            buffer.writer().print("{s} ", .{self.request.parts.method.toString()});
-            buffer.writer().print("{s} {s}\r\n", .{self.request.parts.uri.path, self.request.parts.version.toString()});
+            _ = try buffer.writer().print("{s} ", .{self.request.parts.method.toString()});
+            _ = try buffer.writer().print("{s} {s}\r\n", .{ self.request.parts.uri.path, self.request.parts.version.toString() });
             var it = self.request.parts.headers.iterator();
             while (it.next()) |header| {
-                 buffer.writer().print("{s}: {s}\r\n", .{header.name, header.value});
+                _ = try buffer.writer().print("{s}: {s}\r\n", .{ header.name, header.value });
             }
 
-            try buffer.write("\r\n");
+            _ = try buffer.write("\r\n");
 
             if (self.request.parts.method.shouldHaveBody()) {
-                try buffer.write(self.request.body.buffer.str());
+                _ = try buffer.write(self.request.body.buffer.str());
             }
-            return buffer.str();
-        }
 
-        pub fn send(self: *Sender, writer: anytype) !usize {
-            const bytes = self.toBytes();
+            writer.writeAll(buffer.str()) catch |err| {
+                std.log.err("Error: {?}", .{err});
+            };
 
-            if (bytes) |data| {
-                defer self.request.allocator.free(data);
-                writer.writeAll(data) catch |err| {
-                    std.log.err("Error: {?}", .{err});
-                };
-                return data.len;
-            } else {
-                return 0;
-            }
+            return buffer.size;
         }
     };
 
@@ -128,4 +119,3 @@ test "request" {
     std.debug.print("\n uri: {s}, method: {s}, version: {s}\n", .{ request.parts.uri.scheme, request.parts.method.toString(), request.parts.version.toString() });
     std.debug.print("\n name: {s} \n", .{request.parts.headers.get("name").?});
 }
-

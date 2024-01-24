@@ -20,7 +20,7 @@ body: Body,
 allocator: Allocator,
 
 pub fn new(allocator: Allocator, status: Status, version: Version) !Response {
- return Response{
+    return Response{
         .parts = Parts{
             .status = status,
             .version = version,
@@ -32,7 +32,7 @@ pub fn new(allocator: Allocator, status: Status, version: Version) !Response {
 }
 
 pub fn init(allocator: Allocator) !Response {
-      return Response{
+    return Response{
         .parts = Parts{
             .headers = try Headers.init(allocator, 1024),
         },
@@ -134,7 +134,7 @@ pub usingnamespace struct {
                     if (self.read_current >= self.read_needed) {
                         self.encoding = .unknown;
                     }
-                    try self.response.body.buffer.write(self.read_buffer[0..nread]);
+                    _ = try self.response.body.buffer.write(self.read_buffer[0..nread]);
                 },
                 .chunked => {
                     if (self.read_needed == 0) {
@@ -172,7 +172,7 @@ pub usingnamespace struct {
                         self.read_needed = 0;
                     }
 
-                    try self.response.body.buffer.write(self.read_buffer[0..nread]);
+                    _ = try self.response.body.buffer.write(self.read_buffer[0..nread]);
                 },
             }
         }
