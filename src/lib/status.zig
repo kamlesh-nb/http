@@ -27,6 +27,7 @@ pub const Status = enum(u10) {
     method_not_allowed = 405,
     not_acceptable = 406,
     gone = 410,
+    length_required = 411,
     too_many_requests = 429,
 
     // server error
@@ -68,6 +69,8 @@ pub const Status = enum(u10) {
             return .not_acceptable;
         } else if (std.ascii.eqlIgnoreCase(str, "410")) {
             return .gone;
+        } else if (std.ascii.eqlIgnoreCase(str, "411")) {
+            return .length_required;
         } else if (std.ascii.eqlIgnoreCase(str, "429")) {
             return .too_many_requests;
         } else if (std.ascii.eqlIgnoreCase(str, "500")) {
@@ -78,7 +81,7 @@ pub const Status = enum(u10) {
             return .service_unavailable;
         } else if (std.ascii.eqlIgnoreCase(str, "504")) {
             return .gateway_timeout;
-        }  else {
+        } else {
             return error.InvalidStatus;
         }
     }
