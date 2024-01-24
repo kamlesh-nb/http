@@ -89,7 +89,7 @@ pub usingnamespace struct {
         }
 
         pub fn send(self: *Sender, writer: anytype) !usize {
-            const bytes = try self.toBytes();
+            const bytes = self.toBytes();
 
             if (bytes) |data| {
                 defer self.request.allocator.free(data);
