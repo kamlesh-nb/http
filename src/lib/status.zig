@@ -26,6 +26,7 @@ pub const Status = enum(u10) {
     not_found = 404,
     method_not_allowed = 405,
     not_acceptable = 406,
+    conflict = 409,
     gone = 410,
     length_required = 411,
     too_many_requests = 429,
