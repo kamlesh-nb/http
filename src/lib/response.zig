@@ -103,7 +103,13 @@ pub usingnamespace struct {
                 if (self.encoding != .unknown) return error.InvalidEncodingHeader;
 
                 self.encoding = .content_length;
-                self.has_body = true;
+                const content_len = try std.fmt.parseInt(u16, value[0..], 16);
+                if (content_len == 0) {
+                    self.has_body = false;
+                } else {
+                    self.has_body = true;
+                }
+
                 self.read_needed = std.fmt.parseUnsigned(usize, value, 10) catch return error.InvalidEncodingHeader;
             } else if (std.ascii.eqlIgnoreCase(name, "transfer-encoding")) {
                 if (self.encoding != .unknown) return error.InvalidEncodingHeader;
@@ -120,6 +126,10 @@ pub usingnamespace struct {
         }
 
         fn read_body(self: *Parser, reader: anytype) !void {
+            if (!self.has_body) {
+                self.done = true;
+                return;
+            }
             switch (self.encoding) {
                 .unknown => {
                     self.done = true;
