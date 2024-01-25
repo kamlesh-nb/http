@@ -52,6 +52,17 @@ pub fn get(self: Headers, needle: []const u8) ?[]const u8 {
     return null;
 }
 
+
+pub fn set(self: Headers, name: []const u8, value: []const u8) !void {
+    const keys = self.keys[0..self.len];
+    for (keys, 0..) |key, i| {
+        if (mem.eql(u8, key, name)) {
+            self.values[i] = value;
+            return;
+        }
+    }
+}
+
 pub fn reset(self: *Headers) void {
     self.len = 0;
 }
