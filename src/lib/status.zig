@@ -30,6 +30,7 @@ pub const Status = enum(u10) {
     conflict = 409,
     gone = 410,
     length_required = 411,
+    precondition_failed = 412,
     entity_too_large = 413,
     too_many_requests = 429,
 
@@ -78,6 +79,8 @@ pub const Status = enum(u10) {
             return .gone;
         } else if (std.ascii.eqlIgnoreCase(str, "411")) {
             return .length_required;
+        } else if (std.ascii.eqlIgnoreCase(str, "412")) {
+            return .precondition_failed;
         } else if (std.ascii.eqlIgnoreCase(str, "413")) {
             return .entity_too_large;
         } else if (std.ascii.eqlIgnoreCase(str, "429")) {
@@ -126,6 +129,7 @@ pub const Status = enum(u10) {
             .method_not_allowed => return "Method Not Allowed",
             .not_acceptable => return "Not Acceptable",
             .gone => return "Gone",
+            .precondition_failed => return "Precondition Failed",
             .too_many_requests => return "Too Many Requests",
 
             // server error
