@@ -46,6 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           name: release-http
+          path: ./
       - name: Archive Release Http
         uses: thedoctor0/zip-release@0.7.1
         with:
