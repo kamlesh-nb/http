@@ -28,6 +28,52 @@ jobs:
             - Second Change
           draft: false
           prerelease: false
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create a GitHub release
+        id: tag_create
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: ${{ steps.tag_version.outputs.changelog }}
+      - name: Upload Core Package
+        uses: actions/upload-artifact@v2
+        with:
+          name: release-http
+          path: ./
+      - name: Create Release folder
+        run: mkdir -p github-release
+      - name: Download Release Http
+        uses: actions/download-artifact@v2
+        with:
+          name: release-http
+      - name: Archive Release Http
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          type: "tar"
+          filename: "github-release/http.tar.gz"
+          exclusions: "github-release .git .github"
+      - name: Create Release Http
+        id: create-new-release
+        uses: actions/create-release@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          release_name: Release ${{ steps.tag_version.outputs.new_tag }}
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-new-release.outputs.upload_url }}
+          asset_path: "github-release/http.tar.gz"
+          asset_name: http${{ steps.tag_version.outputs.new_tag }}.tar.gz
+          asset_content_type: application/gzip
 
 # Controls when the workflow will run
 # on:
