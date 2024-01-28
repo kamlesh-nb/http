@@ -56,8 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag_create.outputs.id }}
-          release_name: Release ${{ steps.tag_create.outputs.id }}
+          tag_name: ${{ steps.tag_version.outputs.previous_tag }}
+          release_name: Release ${{ steps.tag_version.outputs.previous_tag }}
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
