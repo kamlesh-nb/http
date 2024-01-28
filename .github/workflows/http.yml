@@ -42,11 +42,8 @@ jobs:
         run: mkdir -p github-release
       - name: Download Release Http
         uses: actions/download-artifact@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          name: release-http
-          path: .
+      - name: List Files
+        run: ls -R
       - name: Archive Release Http
         uses: thedoctor0/zip-release@0.7.1
         with:
