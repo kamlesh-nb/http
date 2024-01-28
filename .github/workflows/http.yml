@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: release-http
-          path: ./
+          path: .
       - name: Create Release folder
         run: mkdir -p github-release
       - name: Download Release Http
@@ -46,7 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           name: release-http
-          path: ./
+          path: .
       - name: Archive Release Http
         uses: thedoctor0/zip-release@0.7.1
         with:
