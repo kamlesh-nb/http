@@ -40,14 +40,12 @@ jobs:
           path: ./
       - name: Create Release folder
         run: mkdir -p github-release
-      # - name: Download Release Http
-      #   uses: actions/download-artifact@v2
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   with:
-      #     name: release-http
-      # - name: Display structure of downloaded files
-      #   run: ls -R
+      - name: Download Release Http
+        uses: actions/download-artifact@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: release-http
       - name: Archive Release Http
         uses: thedoctor0/zip-release@0.7.1
         with:
