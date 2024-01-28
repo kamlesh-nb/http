@@ -25,17 +25,17 @@ jobs:
           tag: ${{ steps.tag_version.outputs.new_tag }}
           name: Release ${{ steps.tag_version.outputs.new_tag }}
           body: ${{ steps.tag_version.outputs.changelog }}
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-        with:
-          tag_name: ${{ steps.tag_version.outputs.previous_tag }}
-          release_name: Release ${{ steps.tag_version.outputs.previous_tag }}
-          body: |
-            Changes in this Release
-            - First Change
-            - Second Change
-          draft: false
-          prerelease: false
+      # - name: Create Release
+      #   id: create_release
+      #   uses: actions/create-release@latest
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      #   with:
+      #     tag_name: ${{ steps.tag_version.outputs.new_tag }}
+      #     release_name: Release ${{ steps.tag_version.outputs.new_tag }}
+      #     body: |
+      #       Changes in this Release
+      #       - First Change
+      #       - Second Change
+      #     draft: false
+      #     prerelease: false
