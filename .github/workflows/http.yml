@@ -37,13 +37,15 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: release-http
-          path: .
+          path: ./
       - name: Create Release folder
         run: mkdir -p github-release
       - name: Download Release Http
         uses: actions/download-artifact@v2
         with:
           name: release-http
+      - name: Display structure of downloaded files
+        run: ls -R
       - name: Archive Release Http
         uses: thedoctor0/zip-release@0.7.1
         with:
