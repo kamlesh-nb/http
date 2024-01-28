@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: release-http
-          path: ./
+          path: .
       - name: Create Release folder
         run: mkdir -p github-release
       - name: Download Release Http
