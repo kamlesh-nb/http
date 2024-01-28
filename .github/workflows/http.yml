@@ -33,13 +33,7 @@ jobs:
         with:
           type: "tar"
           filename: "github-release/http.tar.gz"
-          exclusions: "github-release .git"
-      - name: Release On Push
-        uses: rymndhng/release-on-push-action@master
-        with:
-          bump_version_scheme: "semantic"
-          tag_prefix: "v"
-          release_name: "Release <RELEASE_VERSION>"
+          exclusions: "github-release .git .github"
       - name: Create Release Http
         id: create-new-release
         uses: actions/create-release@master
