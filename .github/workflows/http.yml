@@ -1,36 +1,68 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Http.Zig
 
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  release-http:
+    name: Release Http
+    needs: build-http
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+      - name: Create Release folder
+        run: mkdir -p github-release
+      - name: Download Release Http
+        uses: actions/download-artifact@v2
+        with:
+          name: release-http
+      - name: Archive Release Http
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          type: "tar"
+          filename: "github-release/http.tar.gz"
+          exclusions: "github-release"
+      - name: Release On Push
+        uses: rymndhng/release-on-push-action@master
+        with:
+          bump_version_scheme: "semantic"
+          tag_prefix: "v"
+          release_name: "Release <RELEASE_VERSION>"
+      - name: Create Release Http
+        id: create-new-release
+        uses: actions/create-release@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.run_number }}
+          release_name: http ${{ github.run_number }}
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-new-release.outputs.upload_url }}
+          asset_path: "github-release/http.tar.gz"
+          asset_name: http.tar.gz
+          asset_content_type: application/gzip
+  build-http:
+    name: Build Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Http
+        uses: actions/checkout@v2
+      - name: Upload Core Package
+        uses: actions/upload-artifact@v2
+        with:
+          name: release-core
+          path: ./
