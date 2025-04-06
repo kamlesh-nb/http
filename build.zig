@@ -4,42 +4,41 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 
     const optimize = b.standardOptimizeOption(.{});
+    const buffer = b.dependency("buffer", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
-    const lib = b.addStaticLibrary(.{
+    const lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const lib = b.addLibrary(.{
+        .linkage = .static,
         .name = "http",
-        .root_source_file = .{ .path = "src/root.zig" },
-        .target = target,
-        .optimize = optimize,
+        .root_module = lib_mod,
     });
 
-    _ = b.addModule("http", .{
-        .root_source_file = .{ .path = "src/root.zig" },
-        .imports =  &.{
-            .{
-                .name = "buffer",
-                .module = b.dependency("buffer", .{}).module("buffer"),
-            },
-        },
-    });
+    exe_mod.addImport("http_lib", lib_mod);
 
-    lib.root_module.addImport("buffer", b.dependency("buffer", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("buffer"));
+    lib.root_module.addImport("buffer", buffer.module("buffer"));
 
     b.installArtifact(lib);
 
     const exe = b.addExecutable(.{
         .name = "http",
-        .root_source_file = .{ .path = "src/main.zig" },
-        .target = target,
-        .optimize = optimize,
+        .root_module = exe_mod,
     });
 
-    exe.root_module.addImport("buffer", b.dependency("buffer", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("buffer"));
+    exe.root_module.addImport("buffer", buffer.module("buffer"));
 
     b.installArtifact(exe);
 
@@ -53,6 +52,4 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
- 
-    
 }
