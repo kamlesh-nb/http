@@ -1,6 +1,6 @@
 .{
     .name = .http,
-    .version = "0.0.9",
+    .version = "0.0.10",
     .fingerprint = 0x97780db24e5f4813,
     .dependencies = .{
         .aio = .{
