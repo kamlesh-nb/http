@@ -1,11 +1,11 @@
 .{
-    .name = "http",
-
+    .name = .http,
     .version = "0.0.2",
+    .fingerprint = 0x97780db24e5f4813,
     .dependencies = .{
-        .buffer = .{
-            .url = "https://github.com/kamlesh-nb/buffer/archive/refs/tags/v0.0.3.tar.gz",
-            .hash = "1220748fafefb93777e8c582bd6f328a2abe237c0d749dc8c9f89c7b85b8b5b4ebf2",
+        .aio = .{
+            .url = "git+https://github.com/Cloudef/zig-aio.git#a6f1dbf20cd4941229ca88f379f86cd900b3cd5b",
+            .hash = "aio-0.0.0-776t3vNSBQDq2__62t1vV4l1EkSTCpy7BbBMAiZqJ1ZM",
         },
     },
     .paths = .{

@@ -1,308 +1,169 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const Method = @import("method.zig").Method;
-const Version = @import("version.zig").Version;
-const Body = @import("body.zig");
-const Buffer = @import("buffer.zig").Buffer;
-const Headers = @import("header.zig");
-const Util = @import("util.zig");
+const mem = std.mem;
 
-const Request = @This();
+const aio = @import("aio");
+const coro = @import("coro");
+const u = @import("./utils.zig");
 
-pub const Parts = struct {
-    method: Method = undefined,
-    uri: std.Uri = undefined,
-    headers: Headers = undefined,
-    version: Version = undefined,
-};
+const Chunks = @import("./chunks.zig").Chunks;
+const Pairs = @import("./pairs.zig").Pairs;
+const Method = @import("./method.zig").Method;
+const Version = @import("./version.zig").Version;
 
-parts: Parts,
-body: Body,
-allocator: Allocator,
+pub const Request = @This();
 
-pub fn new(allocator: Allocator, uri: std.Uri, method: Method, version: Version) !Request {
+allocator: mem.Allocator,
+socket: std.posix.socket_t,
+method: Method = undefined,
+version: Version = undefined,
+path: []const u8 = undefined,
+route: std.ArrayList(u8),
+headers: Pairs,
+params: Pairs,
+body: std.ArrayList(u8),
+
+pub fn new(allocator: std.mem.Allocator, socket: std.posix.socket_t) !Request {
     return Request{
-        .parts = Parts{
-            .uri = uri,
-            .method = method,
-            .version = version,
-            .headers = try Headers.init(allocator, 1024),
-        },
-        .body = Body{ .buffer = Buffer.init(allocator) },
+        .socket = socket,
         .allocator = allocator,
+        .headers = try Pairs.init(allocator),
+        .params = try Pairs.init(allocator),
+        .route = std.ArrayList(u8).init(allocator),
+        .body = std.ArrayList(u8).init(allocator),
     };
 }
 
-pub fn init(allocator: Allocator) !Request {
-    return Request{
-        .parts = Parts{
-            .headers = try Headers.init(allocator, 1024),
-        },
-        .body = Body{ .buffer = Buffer.init(allocator) },
-        .allocator = allocator,
-    };
+pub fn getHeader(self: *Request, name: []const u8) ?[]const u8 {
+    return self.headers.get(name);
 }
 
-pub fn deinit(self: *Request) void {
-    self.parts.headers.deinit(self.allocator);
-    self.body.buffer.deinit();
+pub fn getParam(self: *Request, name: []const u8) ?[]const u8 {
+    return self.params.get(name);
 }
 
-pub usingnamespace struct {
-    pub const Parser = struct {
-        request: *Request,
-        state: Util.ParseState = .first_line,
-        event: Util.Event = .status,
-        encoding: Util.TransferEncoding = .unknown,
-        has_chunked_trailer: bool = false,
-        read_buffer: [32768]u8 = undefined,
-        read_needed: usize = 0,
-        read_current: usize = 0,
-        body_len: usize = 0,
-        has_body: bool = false,
-        trailer_state: bool = false,
-        done: bool = false,
-        headers_done: bool = false,
-        body_done: bool = false,
-        temp_uri: []u8 = undefined,
+pub fn parse(self: *Request) !void {
+    const buff = try self.allocator.alloc(u8, 4096);
+    var len: usize = 0;
 
-        fn read_first_line(self: *Parser, reader: anytype) !void {
-            var first_line: [1024]u8 = undefined;
-            const line = try Util.readUntilEndOfLine(reader, &first_line);
-            const index_separator = std.mem.indexOf(u8, line, " ") orelse 0;
-            if (index_separator == 0)
-                return;
-            const method = line[0..index_separator];
-            const uri = line[index_separator + 1 ..];
-            const index_uri = std.mem.indexOf(u8, uri, " ") orelse 0;
-            if (index_uri == 0)
-                return;
-            self.temp_uri = uri[0..index_uri];
-            const version = uri[index_uri + 1 ..];
-            if (std.ascii.eqlIgnoreCase(method, "GET")) {
-                self.request.parts.method = Method.get;
-            } else if (std.ascii.eqlIgnoreCase(method, "POST")) {
-                self.request.parts.method = Method.post;
-            } else if (std.ascii.eqlIgnoreCase(method, "PUT")) {
-                self.request.parts.method = Method.put;
-            } else if (std.ascii.eqlIgnoreCase(method, "DELETE")) {
-                self.request.parts.method = Method.delete;
-            } else if (std.ascii.eqlIgnoreCase(method, "HEAD")) {
-                self.request.parts.method = Method.head;
-            } else if (std.ascii.eqlIgnoreCase(method, "OPTIONS")) {
-                self.request.parts.method = Method.options;
-            } else if (std.ascii.eqlIgnoreCase(method, "PATCH")) {
-                self.request.parts.method = Method.patch;
-            } else {
-                return error.InvalidMethod;
-            }
-            if (std.ascii.eqlIgnoreCase(version, "HTTP/1.0")) {
-                self.request.parts.version = Version.Http10;
-            } else if (std.ascii.eqlIgnoreCase(version, "HTTP/1.1")) {
-                self.request.parts.version = Version.Http11;
-            } else if (std.ascii.eqlIgnoreCase(version, "HTTP/2.0")) {
-                self.request.parts.version = Version.H2;
-            } else {
-                return error.InvalidVersion;
-            }
+    try coro.io.single(.recv, .{ .socket = self.socket, .buffer = buff, .out_read = &len });
 
-            // self.request.parts.uri = try std.Uri.parse(path);
-            // if (self.request.parts.uri.scheme.len == 0) {
-            //     return error.InvalidUri;
-            // }
-            // if (!std.mem.eql(u8, self.request.parts.uri.scheme, "http") and !std.mem.eql(u8, self.request.parts.uri.scheme, "https")) {
-            //     return error.InvalidUri;
-            // }
-            // if (self.request.parts.uri.host == null) {
-            //     return error.InvalidUri;
-            // }
-            self.state = .header;
-        }
+    var lines = mem.splitSequence(u8, buff, "\r\n");
 
-        fn read_headers(self: *Parser, reader: anytype) !void {
-            var header: [1024]u8 = undefined;
-            const line = try Util.readUntilEndOfLine(reader, &header);
-            if (line.len == 0) {
-                if (self.trailer_state) {
-                    self.encoding = .unknown;
-                    self.done = true;
-                } else {
-                    self.state = .body;
-                    self.headers_done = true;
-                }
-            }
+    //get first line of request
+    const first_line = lines.next() orelse return error.InvalidRequest;
 
-            const index_separator = std.mem.indexOf(u8, line, ":") orelse 0;
-            if (index_separator == 0)
-                return;
+    var flit = std.mem.splitScalar(u8, first_line, ' ');
 
-            const name = line[0..index_separator];
-            const value = std.mem.trim(u8, line[index_separator + 1 ..], &[_]u8{ ' ', '\t' });
-
-            if (std.ascii.eqlIgnoreCase(name, "content-length")) {
-                if (self.encoding != .unknown) return error.InvalidEncodingHeader;
-
-                self.encoding = .content_length;
-                const content_len = try std.fmt.parseInt(u16, value[0..], 16);
-                if (content_len == 0) {
-                    self.has_body = false;
-                } else {
-                    self.has_body = true;
-                }
-
-                self.read_needed = std.fmt.parseUnsigned(usize, value, 10) catch return error.InvalidEncodingHeader;
-            } else if (std.ascii.eqlIgnoreCase(name, "transfer-encoding")) {
-                if (self.encoding != .unknown) return error.InvalidEncodingHeader;
-
-                // We can only decode chunked messages, not compressed messages
-                if (std.ascii.indexOfIgnoreCase(value, "chunked") orelse 1 == 0) {
-                    self.encoding = .chunked;
-                    self.has_body = true;
-                }
-            } else if (std.ascii.eqlIgnoreCase(name, "trailer")) {
-                self.has_chunked_trailer = true;
-            }
-            self.request.parts.headers.add(name, value);
-        }
-
-        fn read_body(self: *Parser, reader: anytype) !void {
-            if (!self.has_body) {
-                self.done = true;
-                return;
-            }
-            switch (self.encoding) {
-                .unknown => {
-                    self.done = true;
-                },
-                .content_length => {
-                    const left = @min(self.read_needed - self.read_current, self.read_buffer.len);
-                    const nread = try reader.read(self.read_buffer[0..left]);
-
-                    self.read_current += nread;
-
-                    // Is it even possible for read_current to be > read_needed?
-                    if (self.read_current >= self.read_needed) {
-                        self.encoding = .unknown;
-                    }
-                    _ = try self.request.body.buffer.write(self.read_buffer[0..nread]);
-                },
-                .chunked => {
-                    if (self.read_needed == 0) {
-                        const line = try Util.readUntilEndOfLine(reader, &self.read_buffer);
-                        const chunk_len = std.fmt.parseUnsigned(usize, line, 16) catch return error.InvalidChunkedPayload;
-
-                        if (chunk_len == 0) {
-                            if (self.has_chunked_trailer) {
-                                self.state = .header;
-                                self.trailer_state = true;
-                            } else {
-                                self.encoding = .unknown;
-                                self.done = true;
-                                return;
-                            }
-                        } else {
-                            self.read_needed = chunk_len;
-                            self.read_current = 0;
-                        }
-                    }
-
-                    const left = @min(self.read_needed - self.read_current, self.read_buffer.len);
-                    const nread = try reader.read(self.read_buffer[0..left]);
-
-                    self.read_current += nread;
-
-                    // Is it even possible for read_current to be > read_needed?
-                    if (self.read_current >= self.read_needed) {
-                        var crlf: [2]u8 = undefined;
-                        const lfread = try reader.readAll(&crlf);
-
-                        if (lfread < 2) return error.EndOfStream;
-                        if (crlf[0] != '\r' or crlf[1] != '\n') return error.InvalidChunkedPayload;
-
-                        self.read_needed = 0;
-                    }
-
-                    _ = try self.request.body.buffer.write(self.read_buffer[0..nread]);
-                },
-            }
-        }
-
-        fn next(self: *Parser, reader: anytype) !void {
-            //
-            try read_first_line(self, reader);
-            while (!self.headers_done) {
-                if (self.done)
-                    break;
-                try read_headers(self, reader);
-            }
-
-            while (!self.done) {
-                try read_body(self, reader);
-            }
-        }
-
-        pub fn parse(self: *Parser, reader: anytype) !void {
-            try next(self, reader);
-        }
-    };
-
-    pub fn parser(req: *Request) Parser {
-        return Parser{
-            .request = req,
-            .state = .first_line,
-        };
+    if (flit.next()) |method| {
+        self.method = try Method.fromString(method);
+    } else {
+        std.log.err("No Method in: {s}", .{buff});
     }
 
-    pub const Sender = struct {
-        request: *Request,
-        status: usize,
-
-        pub fn send(self: *Sender, writer: anytype) !usize {
-            var buffer = Buffer.init(self.request.allocator);
-            defer buffer.deinit();
-            _ = try buffer.writer().print("{s} ", .{self.request.parts.method.toString()});
-            _ = try buffer.writer().print("{s} {s}\r\n", .{ self.request.parts.uri.path, self.request.parts.version.toString() });
-            var it = self.request.parts.headers.iterator();
-            while (it.next()) |header| {
-                _ = try buffer.writer().print("{s}: {s}\r\n", .{ header.name, header.value });
-            }
-
-            _ = try buffer.write("\r\n");
-
-            if (self.request.parts.method.shouldHaveBody()) {
-                _ = try buffer.write(self.request.body.buffer.str());
-            }
-
-            writer.writeAll(buffer.str()) catch |err| {
-                std.log.err("Error: {?}", .{err});
-            };
-
-            return buffer.size;
+    if (flit.next()) |path| {
+        if (mem.eql(u8, path, "/")) {
+            self.path = try self.allocator.dupe(u8, "/index.html");
+        } else {
+            self.path = try self.allocator.dupe(u8, path);
         }
-    };
-
-    pub fn sender(req: *Request) Sender {
-        return Sender{
-            .request = req,
-            .status = 0,
-        };
+    } else {
+        std.log.err("No Path in: {s}", .{buff});
     }
-};
 
-test "request" {
-    const Person = struct {
-        name: []const u8,
-        age: i32,
-    };
+    if (flit.next()) |version| {
+        self.version = try Version.fromString(version);
+    } else {
+        std.log.err("No Version in: {s}", .{buff});
+    }
 
-    const uri = try std.Uri.parse("https:://www.google.com");
-    var request = try Request.new(std.testing.allocator, uri, .get, .Http11);
-    _ = try request.body.buffer.write("{ \"name\":  \"oooop\", \"age\": 54 }");
-    defer request.deinit();
-    request.parts.headers.add("name", "loooop");
+    //get request parameters and url route for api patameters
+    var path_iter = mem.splitScalar(u8, self.path, '?');
+    //skip contents before '?'
+    if (path_iter.next()) |segs| {
+        if (mem.startsWith(u8, segs, "/api")) {
+            var seg_iter = std.mem.splitSequence(u8, segs, "/");
+            _ = seg_iter.next().?;
+            _ = seg_iter.next().?;
+            const resource = seg_iter.next().?;
+            try self.route.writer().print("/{s}", .{resource});
+        }
+    }
 
-    const person = try request.body.get(std.testing.allocator, Person);
-    std.debug.print("name: {s} & age: {d}\n", .{ person.name, person.age });
-    std.debug.print("\n uri: {s}, method: {s}, version: {s}\n", .{ request.parts.uri.scheme, request.parts.method.toString(), request.parts.version.toString() });
-    std.debug.print("\n name: {s} \n", .{request.parts.headers.get("name").?});
+    if (path_iter.next()) |params| {
+        var keyvals = mem.splitScalar(u8, params, '&');
+
+        while (keyvals.next()) |param| {
+            var p = mem.splitScalar(u8, param, '=');
+            const name = p.next().?;
+            const value = p.next().?;
+            try self.params.add(name, try u.urlDecode(self.allocator, value));
+
+            try self.route.writer().print("/:{s}", .{name});
+        }
+    }
+
+    //get request headers
+    while (lines.next()) |item| {
+        if (item.len == 0) break;
+        var header = mem.splitScalar(u8, item, ':');
+        const name = @constCast(header.next()) orelse return error.InvalidHeader;
+        const value = header.next().?;
+        u.lowerStringInPlace(name);
+
+        try self.headers.add(name, value[1..]);
+    }
+
+    //Get Request Body
+    if (self.method == .post or self.method == .put) {
+        if (self.headers.get("content-length")) |content_length_str| {
+            const content_length = try std.fmt.parseInt(usize, content_length_str, 10);
+            if (lines.next()) |body| {
+                try self.body.appendSlice(body[0..content_length]);
+            }
+        } else {
+            var chunks = Chunks.init(self.allocator, self.socket);
+            const body = try chunks.readChunks();
+            if (body) |b| {
+                try self.body.appendSlice(b);
+            }
+        }
+    }
+}
+
+pub fn send(self: *Request) !void {
+    var buffer = std.ArrayList(u8).init(self.allocator);
+
+    try buffer.writer().print("{s} {s} {s}\r\n", .{ self.method.toString(), self.path, self.version.toString() });
+
+    if (self.body.items.len > 5000) {
+        try self.setHeader("Transfer-Encoding", "chunked");
+    } else {
+        try self.setHeader("Content-Length", try std.fmt.allocPrint(self.allocator, "{}", .{self.body.items.len}));
+    }
+
+    // Write headers
+    for (self.headers.list.items, 0..) |item, i| {
+        _ = i;
+        try buffer.writer().print("{s}: {s}\r\n", .{ item.name, item.value });
+    }
+
+    _ = try buffer.write("\r\n");
+
+    if (self.headers.get("Content-Length")) {
+        try buffer.appendSlice(self.body.items);
+        try coro.io.single(.send, .{ .socket = self.client, .buffer = buffer.items });
+    } else {
+        try coro.io.single(.send, .{ .socket = self.client, .buffer = buffer.items });
+        const chunk_size = 5000;
+        var start: usize = 0;
+        while (start < self.body.items.len) {
+            const end = @min(start + chunk_size, self.body.items.len);
+            const chunk = try self.allocator.alloc(u8, end - start);
+            @memcpy(chunk, self.body.items[start..end]);
+
+            try Chunks.writeChunk(self.allocator, self.socket, chunk);
+            start = end;
+        }
+        try Chunks.writeFinalChunk(self.socket);
+    }
 }

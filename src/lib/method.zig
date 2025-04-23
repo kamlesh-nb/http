@@ -26,7 +26,7 @@ pub const Method = enum(u4) {
         }
     }
 
-    fn fromString(s: []const u8) !Method {
+    pub fn fromString(s: []const u8) !Method {
         if (ascii.eqlIgnoreCase(s, "GET")) {
             return .get;
         } else if (ascii.eqlIgnoreCase(s, "HEAD")) {
