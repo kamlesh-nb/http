@@ -65,12 +65,57 @@ pub fn sendError(self: *Response) !void {
     }
 }
 
-pub fn parse(self: *Response) !void {
+pub fn read(self: *Response) !void {
     const buf = try self.allocator.alloc(u8, 4096);
     var len: usize = 0;
 
     try coro.io.single(.recv, .{ .socket = self.socket, .buffer = buf, .out_read = &len });
 
+    var lines = mem.splitSequence(u8, buf, "\r\n");
+
+    //Get status line of response
+    const first_line = lines.next() orelse return error.InvalidResponse;
+
+    var flit = std.mem.splitScalar(u8, first_line, ' ');
+
+    if (flit.next()) |version| {
+        self.version = try Version.fromString(version);
+    } else {
+        std.log.err("No Method in: {s}", .{buf});
+    }
+
+    if (flit.next()) |status| {
+        self.status = @enumFromInt(try std.fmt.parseInt(u16, status, 10));
+    } else {
+        std.log.err("No Status in: {s}", .{buf});
+    }
+    //ignore status phrase
+    _ = flit.next();
+
+    //get response headers
+    while (lines.next()) |item| {
+        if (item.len == 0) break;
+        var header = mem.splitScalar(u8, item, ':');
+        const name = header.next().?;
+        const value = header.next().?;
+        try self.headers.add(name, value[1..]);
+    }
+
+    if (self.headers.get("Content-Length")) |content_length_str| {
+        const content_length = try std.fmt.parseInt(usize, content_length_str, 10);
+        if (lines.next()) |body| {
+            try self.body.appendSlice(body[0..content_length]);
+        }
+    } else {
+        var chunks = Chunks.init(self.allocator, self.client);
+        const body = try chunks.readChunks();
+        if (body) |b| {
+            try self.body.appendSlice(b);
+        }
+    }
+}
+
+pub fn parse(self: *Response, buf: []const u8) !void {
     var lines = mem.splitSequence(u8, buf, "\r\n");
 
     //Get status line of response
