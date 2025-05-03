@@ -9,6 +9,7 @@ const Chunks = @import("./chunks.zig").Chunks;
 const Pairs = @import("./pairs.zig").Pairs;
 const Method = @import("./method.zig").Method;
 const Version = @import("./version.zig").Version;
+const Body = @import("body.zig");
 
 pub const Request = @This();
 
@@ -20,7 +21,7 @@ path: []const u8 = undefined,
 route: std.ArrayList(u8),
 headers: Pairs,
 params: Pairs,
-body: std.ArrayList(u8),
+body: Body,
 
 pub fn new(allocator: std.mem.Allocator, socket: std.posix.socket_t) !Request {
     return Request{
@@ -29,7 +30,7 @@ pub fn new(allocator: std.mem.Allocator, socket: std.posix.socket_t) !Request {
         .headers = try Pairs.init(allocator),
         .params = try Pairs.init(allocator),
         .route = std.ArrayList(u8).init(allocator),
-        .body = std.ArrayList(u8).init(allocator),
+        .body = Body.init(allocator),
     };
 }
 
@@ -255,5 +256,11 @@ pub fn send(self: *Request) !void {
         }
         try coro.io.single(.send, .{ .socket = self.client, .buffer = buffer.items });
     }
-    
+}
+
+pub fn deinit(self: *Request) void{
+    self.headers.deinit();
+    self.params.deinit();
+    self.body.deinit();
+    self.route.deinit();
 }

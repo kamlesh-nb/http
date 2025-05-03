@@ -9,7 +9,7 @@ const Mime = @import("./mime.zig").Mime;
 const Pairs = @import("./pairs.zig").Pairs;
 const Status = @import("./status.zig").Status;
 const Version = @import("./version.zig").Version;
-// const Buffer = @import("./buffer.zig");
+const Body = @import("body.zig");
 
 pub const Response = @This();
 
@@ -18,7 +18,7 @@ client: std.posix.socket_t = undefined,
 status: Status = undefined,
 version: Version = undefined,
 headers: Pairs,
-body: std.ArrayList(u8),
+body: Body,
 written: bool = false,
 
 pub fn new(allocator: mem.Allocator, socket: std.posix.socket_t) !Response {
@@ -26,7 +26,7 @@ pub fn new(allocator: mem.Allocator, socket: std.posix.socket_t) !Response {
         .client = socket,
         .allocator = allocator,
         .headers = try Pairs.init(allocator),
-        .body = std.ArrayList(u8).init(allocator),
+        .body = Body.init(allocator),
     };
 }
 
@@ -211,4 +211,9 @@ pub fn send(self: *Response) !void {
         }
         try coro.io.single(.send, .{ .socket = self.client, .buffer = buffer.items });
     }
+}
+
+pub fn deinit(self: *Response) void {
+    self.headers.deinit();
+    self.body.deinit();
 }
