@@ -227,6 +227,35 @@ pub fn parse(self: *Request, buff: []const u8) !void {
     }
 }
 
+pub fn toBytes(self: *Request) ![]const u8 {
+    
+    var buffer = std.ArrayList(u8).init(self.allocator);
+    
+    try buffer.writer().print("{s} {s} {s}\r\n", .{ self.method.toString(), self.path, self.version.toString() });
+
+    if (self.body.items.len > 5000) {
+        try self.setHeader("Transfer-Encoding", "chunked");
+    } else {
+        try self.setHeader("Content-Length", try std.fmt.allocPrint(self.allocator, "{}", .{self.body.items.len}));
+    }
+
+    // Write headers
+    for (self.headers.list.items, 0..) |item, i| {
+        _ = i;
+        try buffer.writer().print("{s}: {s}\r\n", .{ item.name, item.value });
+    }
+
+    _ = try buffer.write("\r\n");
+
+        // Write body if present
+        if (self.body.items.len > 0) {
+            _ = try buffer.writer().write(self.body.items);
+        } else {
+            _ = try buffer.writer().write("\r\n");
+        }
+    return buffer.items;
+}
+
 pub fn send(self: *Request) !void {
     var buffer = std.ArrayList(u8).init(self.allocator);
     
