@@ -30,6 +30,14 @@ pub fn new(allocator: mem.Allocator, socket: std.posix.socket_t) !Response {
     };
 }
 
+pub fn init(allocator: std.mem.Allocator) !Response {
+    return Response{
+        .allocator = allocator,
+        .headers = try Pairs.init(allocator),
+        .body = Body.init(allocator),
+    };
+}
+
 pub fn setHeader(self: *Response, name: []const u8, value: []const u8) !void {
     try self.headers.add(name, value);
 }
