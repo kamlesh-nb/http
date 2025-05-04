@@ -227,7 +227,7 @@ pub fn parse(self: *Request, buff: []const u8) !void {
     }
 }
 
-pub fn toBytes(self: *Request) ![]const u8 {
+pub fn toBytes(self: *Request) ![]u8 {
     
     var buffer = std.ArrayList(u8).init(self.allocator);
     
