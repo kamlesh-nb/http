@@ -14,7 +14,7 @@ const Body = @import("body.zig");
 pub const Request = @This();
 
 allocator: mem.Allocator,
-socket: std.posix.socket_t,
+socket: std.posix.socket_t = undefined,
 method: Method = undefined,
 version: Version = undefined,
 path: []const u8 = undefined,
@@ -32,6 +32,18 @@ pub fn new(allocator: std.mem.Allocator, socket: std.posix.socket_t) !Request {
         .route = std.ArrayList(u8).init(allocator),
         .body = Body.init(allocator),
     };
+}
+
+pub fn init(allocator: std.mem.Allocator) !Request {
+
+    return Request{
+        .allocator = allocator,
+        .headers = try Pairs.init(allocator),
+        .params = try Pairs.init(allocator),
+        .route = std.ArrayList(u8).init(allocator),
+        .body = Body.init(allocator),
+    };
+
 }
 
 pub fn getHeader(self: *Request, name: []const u8) ?[]const u8 {
@@ -217,7 +229,7 @@ pub fn parse(self: *Request, buff: []const u8) !void {
 
 pub fn send(self: *Request) !void {
     var buffer = std.ArrayList(u8).init(self.allocator);
-
+    
     try buffer.writer().print("{s} {s} {s}\r\n", .{ self.method.toString(), self.path, self.version.toString() });
 
     if (self.body.items.len > 5000) {
@@ -258,7 +270,7 @@ pub fn send(self: *Request) !void {
     }
 }
 
-pub fn deinit(self: *Request) void{
+pub fn deinit(self: *Request) void {
     self.headers.deinit();
     self.params.deinit();
     self.body.deinit();
