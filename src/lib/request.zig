@@ -53,7 +53,9 @@ pub fn getParam(self: *Request, name: []const u8) ?[]const u8 {
 }
 
 pub fn read(self: *Request) !void {
-    const buff = try self.allocator.alloc(u8, 4096);
+    const buff = try self.allocator.alloc(u8, 8192);
+    defer self.allocator.free(buff);
+
     var len: usize = 0;
 
     try coro.io.single(.recv, .{ .socket = self.socket, .buffer = buff, .out_read = &len });
@@ -129,13 +131,13 @@ pub fn read(self: *Request) !void {
         if (self.headers.get("content-length")) |content_length_str| {
             const content_length = try std.fmt.parseInt(usize, content_length_str, 10);
             if (lines.next()) |body| {
-                try self.body.appendSlice(body[0..content_length]);
+                try self.body.buffer.appendSlice(body[0..content_length]);
             }
         } else {
             var chunks = Chunks.init(self.allocator, self.socket);
             const body = try chunks.readChunks();
             if (body) |b| {
-                try self.body.appendSlice(b);
+                try self.body.buffer.appendSlice(b);
             }
         }
     }

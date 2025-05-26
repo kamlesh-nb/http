@@ -43,7 +43,7 @@ pub fn setHeader(self: *Response, name: []const u8, value: []const u8) !void {
 }
 
 pub fn write(self: *Response, data: []const u8) !void {
-    _ = try self.body.appendSlice(data);
+    _ = try self.body.buffer.appendSlice(data);
 }
 
 pub fn json(self: *Response, data: anytype) !void {
@@ -61,20 +61,22 @@ pub fn sendError(self: *Response) !void {
     try self.setHeader("Connection", "Close");
     switch (self.status) {
         .not_found => {
-            _ = try self.body.appendSlice("Not Found");
+            _ = try self.body.buffer.appendSlice("Not Found");
         },
         .forbidden => {
-            _ = try self.body.appendSlice("Forbiden");
+            _ = try self.body.buffer.appendSlice("Forbiden");
         },
         .internal_server_error => {
-            _ = try self.body.appendSlice("Internal Server Error");
+            _ = try self.body.buffer.appendSlice("Internal Server Error");
         },
         else => {},
     }
 }
 
 pub fn read(self: *Response) !void {
-    const buf = try self.allocator.alloc(u8, 4096);
+    const buf = try self.allocator.alloc(u8, 8192);
+    defer self.allocator.free(buf);
+
     var len: usize = 0;
 
     try coro.io.single(.recv, .{ .socket = self.socket, .buffer = buf, .out_read = &len });
@@ -157,13 +159,13 @@ pub fn parse(self: *Response, buf: []const u8) !void {
     if (self.headers.get("Content-Length")) |content_length_str| {
         const content_length = try std.fmt.parseInt(usize, content_length_str, 10);
         if (lines.next()) |body| {
-            try self.body.appendSlice(body[0..content_length]);
+            try self.body.buffer.appendSlice(body[0..content_length]);
         }
     } else {
         var chunks = Chunks.init(self.allocator, self.client);
         const body = try chunks.readChunks();
         if (body) |b| {
-            try self.body.appendSlice(b);
+            try self.body.buffer.appendSlice(b);
         }
     }
 }
@@ -183,10 +185,10 @@ pub fn send(self: *Response) !void {
     });
 
     //transfer chunked
-    if (self.body.items.len > 5000) {
+    if (self.body.buffer.items.len > 5000) {
         try self.setHeader("Transfer-Encoding", "chunked");
     } else {
-        try self.setHeader("Content-Length", try std.fmt.allocPrint(self.allocator, "{}", .{self.body.items.len}));
+        try self.setHeader("Content-Length", try std.fmt.allocPrint(self.allocator, "{}", .{self.body.buffer.items.len}));
     }
 
     // Write headers
@@ -197,15 +199,15 @@ pub fn send(self: *Response) !void {
 
     _ = try buffer.writer().write("\r\n");
 
-    if (self.body.items.len > 5000) {
+    if (self.body.buffer.items.len > 5000) {
         try coro.io.single(.send, .{ .socket = self.client, .buffer = buffer.items });
 
         const chunk_size = 5000;
         var start: usize = 0;
-        while (start < self.body.items.len) {
-            const end = @min(start + chunk_size, self.body.items.len);
+        while (start < self.body.buffer.items.len) {
+            const end = @min(start + chunk_size, self.body.buffer.items.len);
             const chunk = try self.allocator.alloc(u8, end - start);
-            @memcpy(chunk, self.body.items[start..end]);
+            @memcpy(chunk, self.body.buffer.items[start..end]);
 
             try Chunks.writeChunk(self.allocator, self.client, chunk);
             start = end;
@@ -213,8 +215,8 @@ pub fn send(self: *Response) !void {
         try Chunks.writeFinalChunk(self.client);
     } else {
         // Write body if present
-        if (self.body.items.len > 0) {
-            _ = try buffer.writer().write(self.body.items);
+        if (self.body.buffer.items.len > 0) {
+            _ = try buffer.writer().write(self.body.buffer.items);
         } else {
             _ = try buffer.writer().write("\r\n");
         }
