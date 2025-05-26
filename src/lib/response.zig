@@ -176,6 +176,7 @@ pub fn send(self: *Response) !void {
         try self.sendError();
     }
     var buffer = std.ArrayList(u8).init(self.allocator);
+    defer buffer.deinit();
     try buffer.writer().print("HTTP/1.1 {} {s}\r\n", .{
         @intFromEnum(self.status),
         self.status.toString(),

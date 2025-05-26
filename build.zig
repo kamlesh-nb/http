@@ -11,12 +11,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
- 
-    const exe_mod = b.addModule("http", .{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
 
     const lib = b.addLibrary(.{
         .linkage = .static,
@@ -27,21 +21,10 @@ pub fn build(b: *std.Build) void {
     lib.root_module.addImport("aio", zig_aio.module("aio"));
     lib.root_module.addImport("coro", zig_aio.module("coro"));
 
-    exe_mod.addImport("http_lib", lib_mod);
 
     b.installArtifact(lib);
 
-    const exe = b.addExecutable(.{
-        .name = "http",
-        .root_module = exe_mod,
-    });
-
-    exe.root_module.addImport("aio", zig_aio.module("aio"));
-    exe.root_module.addImport("coro", zig_aio.module("coro"));
-
-    b.installArtifact(exe);
-
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(lib);
 
     run_cmd.step.dependOn(b.getInstallStep());
 

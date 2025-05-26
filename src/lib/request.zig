@@ -35,7 +35,6 @@ pub fn new(allocator: std.mem.Allocator, socket: std.posix.socket_t) !Request {
 }
 
 pub fn init(allocator: std.mem.Allocator) !Request {
-
     return Request{
         .allocator = allocator,
         .headers = try Pairs.init(allocator),
@@ -43,7 +42,6 @@ pub fn init(allocator: std.mem.Allocator) !Request {
         .route = std.ArrayList(u8).init(allocator),
         .body = Body.init(allocator),
     };
-
 }
 
 pub fn getHeader(self: *Request, name: []const u8) ?[]const u8 {
@@ -228,9 +226,8 @@ pub fn parse(self: *Request, buff: []const u8) !void {
 }
 
 pub fn toBytes(self: *Request) ![]u8 {
-    
     var buffer = std.ArrayList(u8).init(self.allocator);
-    
+
     try buffer.writer().print("{s} {s} {s}\r\n", .{ self.method.toString(), self.path, self.version.toString() });
 
     if (self.body.items.len > 5000) {
@@ -247,18 +244,19 @@ pub fn toBytes(self: *Request) ![]u8 {
 
     _ = try buffer.write("\r\n");
 
-        // Write body if present
-        if (self.body.items.len > 0) {
-            _ = try buffer.writer().write(self.body.items);
-        } else {
-            _ = try buffer.writer().write("\r\n");
-        }
+    // Write body if present
+    if (self.body.items.len > 0) {
+        _ = try buffer.writer().write(self.body.items);
+    } else {
+        _ = try buffer.writer().write("\r\n");
+    }
     return buffer.items;
 }
 
 pub fn send(self: *Request) !void {
     var buffer = std.ArrayList(u8).init(self.allocator);
-    
+    defer buffer.deinit();
+
     try buffer.writer().print("{s} {s} {s}\r\n", .{ self.method.toString(), self.path, self.version.toString() });
 
     if (self.body.items.len > 5000) {
